@@ -1,0 +1,90 @@
+model "SDVRP"
+uses "mmxprs","mmive"
+
+setparam("xprs_loadnames",true) 
+
+forward procedure draw
+
+declarations
+	NCITIES = 8
+	NVEHICLES = 3
+	VEHICLES = 1..NVEHICLES
+  	Q = 31
+	
+	x: array(1..NCITIES) of integer
+	y: array(1..NCITIES) of integer
+
+	CITIES = 1..NCITIES ! Cities
+	DIST:  array(CITIES,CITIES) of integer ! Distance between cities
+	assig:   array(CITIES,CITIES,VEHICLES) of mpvar ! si el vehiculo v viaja directamente de i a j
+	Y: array(CITIES,VEHICLES) of mpvar ! cantidad de la demanda del cliente i entregada por el vehiculo v
+	u: array(CITIES,VEHICLES) of mpvar
+    d: array(CITIES) of integer ! demanda del cliente i
+		
+end-declarations
+
+writeln("Solving a SDVRP with n=", NCITIES," cities y m=" , VEHICLES, " vehículos de capacidad Q= ", Q)
+
+! Fill in with random locations
+setrandseed(12)
+forall(i in CITIES) do
+  x(i):=round(random*(NCITIES+1))
+  y(i):=round(random*(NCITIES+1))
+  d(i):=round(random*Q)
+end-do
+forall(i,j in CITIES | i<j) DIST(i,j):=round(sqrt( (x(i)-x(j))*(x(i)-x(j))+(y(i)-y(j))*(y(i)-y(j)) ))
+forall(i,j in CITIES | i<j) DIST(j,i):=DIST(i,j)
+
+forall(i in CITIES) do
+	writeln("Demanda de " + i + " = " ,d(i))
+end-do
+
+
+TotalDist:= sum(i,j in CITIES, v in VEHICLES | i<>j) DIST(i,j)*assig(i,j,v)
+
+
+ forall(j in CITIES) OneVisitJ(j):= sum(i in CITIES, v in VEHICLES | i<>j) assig(i,j,v) >= 1
+ forall(p in CITIES, v in VEHICLES) ( sum(i in CITIES) assig(i,p,v) - sum(j in CITIES) assig(p,j,v) ) = 0
+ forall(i in CITIES ,j in CITIES, v in VEHICLES | i>1 and j>1 and i<>j) u(i,v)-u(j,v) + Q*assig(i,j,v) <= Q - Y(j,v)
+ forall(i in CITIES, v in VEHICLES | i>1) d(i) <= u(i,v)
+ forall(i in CITIES, v in VEHICLES | i>1) u(i,v) <= Q
+ forall(i in CITIES, v in VEHICLES | i>1) Y(i,v) = d(i) * sum(j in CITIES) assig(i,j,v)
+ forall(i in CITIES | i>1) sum(v in VEHICLES) Y(i,v) = d(i)
+ forall(v in VEHICLES) sum(i in CITIES) Y(i,v) <= Q
+ forall(i in CITIES, j in CITIES, v in VEHICLES | i<>j) assig(i,j,v) is_binary
+ forall(i in CITIES, v in VEHICLES | i>1) Y(i,v) >= 0
+ forall(i in CITIES, v in VEHICLES | i>1) u(i,v) >= 0
+
+
+
+minimize(TotalDist)
+draw
+
+
+
+
+writeln("Optimal cost: ", getobjval)
+
+
+
+
+procedure draw
+	IVEerase
+    IVEzoom(-5,-5,NCITIES+5,NCITIES+5)
+    points:=IVEaddplot("cities",IVE_RED)
+    roads:=IVEaddplot("roads",IVE_BLUE)
+
+	forall(i in 1..NCITIES) do
+		IVEdrawlabel(points,x(i),y(i),""+i)
+	end-do
+	!draw links
+	forall(i,j in 1..NCITIES, v in VEHICLES) do
+    	if getsol(assig(i,j,v)) = 1 then
+      		IVEdrawline(roads,x(i),y(i),x(j),y(j))
+    	end-if
+	end-do
+	
+	
+end-procedure    	
+    
+end-model

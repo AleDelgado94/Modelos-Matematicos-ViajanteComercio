@@ -1,0 +1,91 @@
+
+
+model "Prize Collecting Problem"
+uses "mmxprs","mmive"
+
+setparam("xprs_loadnames",true) 
+
+forward procedure draw
+
+declarations
+	NCITIES = 10
+
+	x: array(1..NCITIES) of integer
+	y: array(1..NCITIES) of integer
+
+	CITIES = 1..NCITIES ! Cities
+	DIST:  array(CITIES,CITIES) of integer ! Distance between cities
+	assig:   array(CITIES,CITIES) of mpvar ! 1 if we go directly from i to j
+	flow :   array(CITIES,CITIES) of mpvar
+	Y: array(CITIES) of mpvar
+	P: array(CITIES) of integer
+	
+end-declarations
+
+writeln("Solving a ATSP with n=", NCITIES," cities.")
+
+! Fill in with random locations
+setrandseed(14)
+forall(i in CITIES) do
+  x(i):=round(random*(NCITIES+1))
+  y(i):=round(random*(NCITIES+1))
+  P(i):=round(random*30)
+end-do
+forall(i,j in CITIES | i<j) DIST(i,j):=round(sqrt( (x(i)-x(j))*(x(i)-x(j))+(y(i)-y(j))*(y(i)-y(j)) ))
+forall(i,j in CITIES | i<j) DIST(j,i):=DIST(i,j)
+menor := P(1)
+forall(i in CITIES) do
+	 if(menor >= P(i)) then
+	 	menor := P(i)
+	 end-if
+end-do
+
+
+
+
+
+TotalDist:= sum(i,j in CITIES | i<>j) DIST(i,j)*assig(i,j)
+
+forall(i in CITIES) sum(j in CITIES | i<>j) assig(i,j) = Y(i)
+forall(j in CITIES) sum(i in CITIES | i<>j) assig(i,j) = Y(j)
+
+forall(i in CITIES | i>1) Y(i) is_binary
+sum(i in CITIES) P(i) * Y(i) >= menor
+
+!Eliminación de subtour
+forall(i in CITIES | i<>1) sum(j in CITIES | j<>i) (flow(i,j) - flow(j,i)) = 1
+
+forall(i in 1..NCITIES , j in 2..NCITIES | i<>j ) flow(i,j)<= (NCITIES-2) * assig(i,j)
+forall(i in 2..NCITIES )                          flow(i,1) = (NCITIES-1) * assig(i,1)  
+
+forall(i,j in CITIES | i<>j) assig(i,j) is_binary
+
+minimize(TotalDist)
+draw
+
+
+
+
+writeln("Optimal cost: ", getobjval)
+
+
+
+
+procedure draw
+	IVEerase
+    IVEzoom(-5,-5,NCITIES+5,NCITIES+5)
+    points:=IVEaddplot("cities",IVE_RED)
+    roads:=IVEaddplot("roads",IVE_BLUE)
+
+	forall(i in 1..NCITIES) do
+		IVEdrawlabel(points,x(i),y(i),""+i)
+	end-do
+	!draw links
+	forall(i,j in 1..NCITIES) do
+    	if getsol(assig(i,j)) = 1 then
+      		IVEdrawline(roads,x(i),y(i),x(j),y(j))
+    	end-if
+	end-do
+end-procedure    	
+    
+end-model

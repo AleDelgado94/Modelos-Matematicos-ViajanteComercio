@@ -1,0 +1,115 @@
+model "mcf-CVRP"
+uses "mmxprs","mmive"
+
+setparam("xprs_loadnames",true) 
+
+forward procedure draw
+
+declarations
+	NCITIES = 6 
+	
+	
+	x: array(1..NCITIES) of integer
+	y: array(1..NCITIES) of integer
+	d: array(1..NCITIES) of integer
+	
+
+	CITIES = 1..NCITIES ! Cities
+	
+	C:  array(CITIES,CITIES) of integer ! Cance between cities
+	assig:   array(CITIES,CITIES) of mpvar ! 1 if we go directly from i to j
+
+	f: array(CITIES,CITIES,CITIES) of mpvar
+	Q: array(CITIES) of integer
+
+	
+		
+end-declarations
+
+
+
+! Fill in with random locations
+setrandseed(4)
+forall(i in CITIES) do
+  x(i):=round(random*(NCITIES+1))
+  y(i):=round(random*(NCITIES+1))
+  d(i):=round(random*20)
+ ! Q(i) :=round(20+random*40) 
+end-do
+
+! CAPACIDADES DE LOS VEHICULOS
+Q(1):=20
+Q(2):=47
+Q(3):=50
+Q(4):=45
+Q(5):=100
+Q(6):=28
+
+
+writeln("Solving a mcf-CVRP with n=", NCITIES, + " y Q=", Q, " capacity.")
+
+
+
+forall(i,j in CITIES | i<j) C(i,j):=round(sqrt( (x(i)-x(j))*(x(i)-x(j))+(y(i)-y(j))*(y(i)-y(j)) ))
+forall(i,j in CITIES | i<j) C(j,i):=C(i,j)
+forall(i in CITIES) do
+	writeln("Ciudad " + i + " con demanda " + d(i))
+end-do
+
+
+TotalC:= sum(i,j in CITIES | i<>j) C(i,j)*assig(i,j)
+
+
+
+forall(j in CITIES | j<>1) sum(i in CITIES | i<>j) assig(i,j) = 1
+forall(i in CITIES | i<>1) sum(j in CITIES | i<>j) assig(i,j) = 1
+forall(i in CITIES) sum(j in CITIES | i<>j) assig(i,j) = sum(j in CITIES | i<>j) assig(j,i)
+
+
+forall(k in CITIES) sum(j in CITIES) f(1,j,k) = sum(i in CITIES) f(i,k,k) 
+forall(k in CITIES) sum(i,j in CITIES) f(i,j,k) = 1
+
+
+forall(k in CITIES) sum(j in CITIES) f(j,1,k) = sum(i in CITIES) f(k,i,k) 
+forall(k in CITIES) sum(i in CITIES) f(k,i,k)  = 0
+
+
+forall(k,i in CITIES | i<>k) sum(j in CITIES) f(i,j,k) = sum(j in CITIES) f(j,i,k)
+
+forall(i,j,k in CITIES) f(i,j,k) >= 0
+forall(i,j,k in CITIES) f(i,j,k) <= assig(i,j)
+
+forall(i,j in CITIES) sum(k in CITIES | k<>i and k<>j) d(k) * f(i,j,k) <= (Q(i)-d(i)-d(j))*assig(i,j)
+forall(k in CITIES) sum(i in CITIES | i<>k) d(i)*( sum(j in CITIES) f(i,j,k) + sum(j in CITIES) f(k,j,i)) <= Q(k) - d(k)
+
+forall(i,j in CITIES) assig(i,j) is_binary
+
+
+          
+minimize(TotalC)
+draw
+
+writeln("Coste Óptimo: ", getobjval)
+
+
+
+procedure draw
+	IVEerase
+    IVEzoom(-5,-5,NCITIES+5,NCITIES+5)
+    points:=IVEaddplot("cities",IVE_RED)
+    roads:=IVEaddplot("roads",IVE_BLUE)
+
+	forall(i in 1..NCITIES) do
+		IVEdrawlabel(points,x(i),y(i),""+i)
+	end-do
+	!draw links
+	forall(i,j in 1..NCITIES) do
+    	if getsol(assig(i,j)) = 1 then
+      		IVEdrawline(roads,x(i),y(i),x(j),y(j))
+    	end-if
+	end-do
+	
+	
+end-procedure    	
+    
+end-model

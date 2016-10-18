@@ -1,0 +1,110 @@
+
+
+model "TTP"
+uses "mmxprs","mmive"
+
+setparam("xprs_loadnames",true) 
+
+forward procedure draw
+
+declarations
+  NCITIES = 11
+  NPRODUCTOS = 20
+  CITIES = 1..NCITIES                    ! Cities
+  K = 1..NPRODUCTOS
+  MERCADOS= 2..NCITIES
+  
+  DIST: array(CITIES,CITIES) of integer  ! Distance between cities
+  NEXTC: array(CITIES) of integer        ! Next city after i in the solution
+  X: array(CITIES,CITIES) of mpvar     ! 1 if flight from i to j 
+  Y: array(CITIES) of mpvar
+  Z: array(K,CITIES) of mpvar
+
+  Vk: array(K,MERCADOS) of integer ! Mercados que vendes el producto k
+  P: array(MERCADOS,K) of integer ! Precio de k en el mercado i
+  
+  flow :   array(CITIES,CITIES) of mpvar
+	
+end-declarations
+
+writeln("Solving a TPP with n=", NCITIES," cities.")
+
+! Fill in with random locations
+setrandseed(3)
+forall(i in CITIES) do
+  x(i):=round(random*(NCITIES+1))
+  y(i):=round(random*(NCITIES+1))
+
+end-do
+
+forall(k in K, m in MERCADOS) do
+	Vk(k,m) := round(random*NPRODUCTOS)
+end-do
+
+
+forall(k in K, m in MERCADOS) do
+	if(Vk(k,m)>0) then
+		P(m,k):=round(random*50)
+	elif(Vk(k,m)=0) then 
+		P(m,k):= 999999  ! Si el producto no se vende en el mercado "m" el precio es muy alto
+	end-if	
+end-do
+
+
+forall(i,j in CITIES | i<j) DIST(i,j):=round(sqrt( (x(i)-x(j))*(x(i)-x(j))+(y(i)-y(j))*(y(i)-y(j)) ))
+forall(i,j in CITIES | i<j) DIST(j,i):=DIST(i,j)
+
+
+
+
+ forall(i,j in CITIES | i<j) DIST(j,i):=DIST(i,j)
+
+! Objective: total distance
+ TotalDist:= (sum(i,j in CITIES | i<>j) DIST(i,j)*X(i,j) + sum(l in CITIES, k in K | l<>1) P(l,k)*Z(k,l))
+
+! Visit every city once
+ forall(i in CITIES | i<>1) OneVisitI(i):= sum(j in CITIES | i<>j) X(i,j) = Y(i)
+ forall(j in CITIES | j<>1) OneVisitJ(j):= sum(i in CITIES | i<>j) X(i,j) = Y(j)
+ forall(i in CITIES | i=1)  sum(j in CITIES | j<>i) X(i,j) = 1
+ forall(j in CITIES | j=1)  sum(i in CITIES | i<>j) X(i,j) = 1
+ forall(k in K) sum(i in MERCADOS) Z(k,i) = 1
+ forall(i in CITIES, k in K | i<>1) Y(i) >= Z(k,i)
+
+
+ forall(i,j in CITIES | i<>j) X(i,j) is_binary
+ forall(i in CITIES) Y(i) is_binary
+ forall(i in MERCADOS, k in K) Z(k,i) is_binary
+
+!Eliminación de subtour
+forall(i in CITIES | i<>1) sum(j in CITIES | j<>i) (flow(i,j) - flow(j,i)) = 1
+
+forall(i in 1..NCITIES , j in 2..NCITIES | i<>j ) flow(i,j)<= (NCITIES-2) * X(i,j)
+forall(i in 2..NCITIES )                          flow(i,1) = (NCITIES-1) * X(i,1)  
+
+
+
+minimize(TotalDist)
+draw
+writeln("Optimal cost: ", getobjval)
+
+
+
+
+procedure draw
+	IVEerase
+    IVEzoom(-5,-5,NCITIES+5,NCITIES+5)
+    points:=IVEaddplot("cities",IVE_RED)
+    roads:=IVEaddplot("roads",IVE_BLUE)
+
+	forall(i in 1..NCITIES) do
+		IVEdrawlabel(points,x(i),y(i),""+i)
+	end-do
+	!draw links
+	forall(i,j in 1..NCITIES) do
+    	if getsol(X(i,j)) = 1 then
+      		IVEdrawline(roads,x(i),y(i),x(j),y(j))
+    	end-if
+	end-do
+end-procedure    	
+    
+end-model

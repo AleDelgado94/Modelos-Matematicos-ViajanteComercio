@@ -1,0 +1,106 @@
+model "mPDTSP"
+uses "mmxprs","mmive"
+
+setparam("xprs_loadnames",true) 
+
+forward procedure draw
+
+declarations
+	NCITIES = 10
+	NPRODUCTOS = 2
+	Q=70
+	
+	x: array(1..NCITIES) of integer
+	y: array(1..NCITIES) of integer
+	
+	K= 1..NPRODUCTOS
+
+	CITIES = 1..NCITIES ! Cities
+	d: array(CITIES,K) of integer
+	C:  array(CITIES,CITIES) of integer ! Cance between cities
+	assig:   array(CITIES,CITIES) of mpvar ! 1 if we go directly from i to j
+	flow :   array(CITIES,CITIES) of mpvar
+	f: array(CITIES,CITIES,K) of mpvar
+	
+
+		
+end-declarations
+
+writeln("Solving a mPDTSP with n=", NCITIES," cities, k=" + NPRODUCTOS + " productos and Q=", Q, " capacity.")
+
+! Fill in with random locations
+setrandseed(3)
+forall(i in CITIES) do
+  x(i):=round(random*(NCITIES+1))
+  y(i):=round(random*(NCITIES+1))
+ 
+ 
+end-do
+
+forall(i in CITIES, k in K) do
+	 d(i,k):=round(1+random*5)
+end-do
+
+forall(i,j in CITIES | i<j) C(i,j):=round(sqrt( (x(i)-x(j))*(x(i)-x(j))+(y(i)-y(j))*(y(i)-y(j)) ))
+forall(i,j in CITIES | i<j) C(j,i):=C(i,j)
+forall(i in 2..NCITIES, k in K) do
+	writeln("Ciudad " + i + " con demanda del producto "+ k + " es " + d(i,k))
+end-do
+
+
+TotalC:= sum(i,j in CITIES | i<>j) C(i,j)*assig(i,j)
+
+
+
+forall(j in CITIES ) sum(i in CITIES | i<>j) assig(i,j) = 1
+forall(i in CITIES ) sum(j in CITIES | i<>j) assig(i,j) = 1
+
+forall(i,j in CITIES, k in K | i<>j) f(i,j,k) >= 0
+forall(i,j in CITIES) sum(k in K) f(i,j,k) <= Q * assig(i,j)
+forall(i in CITIES, k in K | i<>1) sum(j in CITIES | i<>j) f(i,j,k) - sum(j in CITIES | i<>j) f(j,i,k) = d(i,k)
+
+
+
+forall(i,j in CITIES) sum(k in K) f(i,j,k) <= Q * assig(i,j)
+
+forall(i,j in CITIES) assig(i,j) is_binary
+
+!Eliminación de subtour
+forall(i in CITIES | i<>1) sum(j in CITIES | j<>i) (flow(i,j) - flow(j,i)) = 1
+
+forall(i in 1..NCITIES , j in 2..NCITIES | i<>j ) flow(i,j)<= (NCITIES-2) * assig(i,j)
+forall(i in 2..NCITIES )                          flow(i,1) = (NCITIES-1) * assig(i,1)  
+
+
+
+minimize(TotalC)
+draw
+
+writeln("Optimal cost: ", getobjval)
+
+   
+
+     
+
+
+
+procedure draw
+	IVEerase
+    IVEzoom(-5,-5,NCITIES+5,NCITIES+5)
+    points:=IVEaddplot("cities",IVE_RED)
+    roads:=IVEaddplot("roads",IVE_BLUE)
+
+	forall(i in 1..NCITIES) do
+		IVEdrawlabel(points,x(i),y(i),""+i)
+	end-do
+	!draw links
+	forall(i,j in 1..NCITIES, k in K) do
+    	if getsol(assig(i,j)) = 1 then
+      		IVEdrawline(roads,x(i),y(i),x(j),y(j))
+    	end-if
+	end-do
+	
+	
+end-procedure    	
+    
+end-model
